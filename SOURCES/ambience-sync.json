@@ -1,0 +1,14 @@
+{
+    "entries": [
+        {
+            "path": "system_settings/look_and_feel/ambience_sync",
+            "title": "Android theme",
+            "type": "page",
+            "icon": "image://theme/icon-m-ambience-sync",
+            "order": 100,
+            "params": {
+                "source": "/usr/share/jolla-settings/pages/ambience-sync/ambience-sync.qml"
+            }
+        }
+    ]
+}

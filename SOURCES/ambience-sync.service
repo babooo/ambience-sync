@@ -1,0 +1,12 @@
+[Unit]
+Description=Sync ambience highlight color to AppSupport
+After=user@100000.service
+Wants=user@100000.service
+
+[Service]
+ExecStart=/usr/libexec/ambience-sync/watch.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

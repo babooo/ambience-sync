@@ -1,0 +1,11 @@
+[Unit]
+Description=Re-apply ambience color when AppSupport starts
+After=appsupport@defaultuser.service
+PartOf=appsupport@defaultuser.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/ambience-sync/on-appsupport-start.sh
+
+[Install]
+WantedBy=appsupport@defaultuser.service
