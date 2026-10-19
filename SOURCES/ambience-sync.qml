@@ -45,6 +45,59 @@ Page {
         defaultValue: false
     }
 
+    // The About page lives in this file so the package needs no extra files
+    Component {
+        id: aboutComponent
+
+        Page {
+            SilicaFlickable {
+                anchors.fill: parent
+                contentHeight: aboutColumn.height + Theme.paddingLarge
+
+                Column {
+                    id: aboutColumn
+                    width: parent.width
+                    spacing: Theme.paddingLarge
+
+                    PageHeader {
+                        title: qsTr("About")
+                    }
+
+                    Repeater {
+                        model: [
+                            qsTr("ambience-sync is a simple add-on that keeps Android apps in step with your Sailfish ambience. It syncs Android's colors and dark/light mode with the current ambience."),
+                            qsTr("A background service running as root waits for changes to the ambience or to the settings on this page and applies them to Android (AppSupport). A second small service starts together with AppSupport and applies your settings again, so nothing is missed while Android was off."),
+                            qsTr("Turning an option off, or uninstalling, restores Android to how it was before. For the cleanest result, uninstall while AppSupport is running.")
+                        ]
+
+                        delegate: Label {
+                            x: Theme.horizontalPageMargin
+                            width: parent.width - 2 * Theme.horizontalPageMargin
+                            wrapMode: Text.Wrap
+                            font.pixelSize: Theme.fontSizeSmall
+                            color: Theme.highlightColor
+                            text: modelData
+                        }
+                    }
+
+                    DetailItem {
+                        width: parent.width
+                        label: qsTr("Version")
+                        value: "1.0.0"
+                    }
+
+                    Button {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: qsTr("Open project page")
+                        onClicked: Qt.openUrlExternally("https://github.com/babooo/ambience-sync")
+                    }
+                }
+
+                VerticalScrollDecorator {}
+            }
+        }
+    }
+
     SilicaFlickable {
         anchors.fill: parent
         contentHeight: column.height
@@ -59,6 +112,11 @@ Page {
                         uninstallConf.value = true
                         pageStack.pop()
                     })
+            }
+
+            MenuItem {
+                text: qsTr("About")
+                onClicked: pageStack.push(aboutComponent)
             }
         }
 
