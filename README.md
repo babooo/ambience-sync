@@ -40,10 +40,11 @@
 - AppSupport (the Android runtime) installed
 
 ## Installation
+Note: Check files & RPMs names. Changes are not always reflected in this Readme file.
 
 #### From the RPM
 
-Download the latest RPM from the [Releases] page.
+Download the latest RPM from Openrepos: https://openrepos.net/content/baboo/ambience-sync
 
 The simplest way to install it: open the RPM in the file manager and **Install**.
 
