@@ -15,8 +15,8 @@ if [ "$1" = "--uninstall" ]; then
     systemctl disable --now ambience-sync.service || :
     /usr/libexec/ambience-sync/apply.sh --reset || :
     rm -rf /usr/libexec/ambience-sync
-    rm -f /usr/lib/systemd/system/ambience-sync.service
-    rm -f /usr/lib/systemd/system/ambience-sync-android.service
+    rm -f /etc/systemd/system/ambience-sync.service
+    rm -f /etc/systemd/system/ambience-sync-android.service
     rm -f /usr/share/jolla-settings/entries/ambience-sync.json
     rm -rf /usr/share/jolla-settings/pages/ambience-sync
     rm -f /usr/share/themes/sailfish-default/silica/z*/icons*/icon-m-ambience-sync.png
@@ -25,12 +25,23 @@ if [ "$1" = "--uninstall" ]; then
     exit 0
 fi
 
+#Check if Appsupport is installed and version if it is(=>13).
+VER=$(rpm -qa | sed -n 's/^appsupport\([0-9][0-9]*\)-system-.*/\1/p' | sort -n | tail -n1)
+if [ -z "$VER" ]; then
+    echo "ambience-sync needs Android AppSupport, which is not installed." >&2
+    exit 1
+fi
+if [ "$VER" -lt 13 ]; then
+    echo "ambience-sync needs Android 13 or newer (found Android $VER)." >&2
+    exit 1
+fi
+
 install -d /usr/libexec/ambience-sync
 install -m 0755 apply.sh /usr/libexec/ambience-sync/apply.sh
 install -m 0755 watch.sh /usr/libexec/ambience-sync/watch.sh
 install -m 0755 on-appsupport-start.sh /usr/libexec/ambience-sync/on-appsupport-start.sh
-install -m 0644 ambience-sync.service /usr/lib/systemd/system/ambience-sync.service
-install -m 0644 ambience-sync-android.service /usr/lib/systemd/system/ambience-sync-android.service
+install -m 0644 ambience-sync.service /etc/systemd/system/ambience-sync.service
+install -m 0644 ambience-sync-android.service /etc/systemd/system/ambience-sync-android.service
 install -d /usr/share/jolla-settings/entries
 install -m 0644 ambience-sync.json /usr/share/jolla-settings/entries/ambience-sync.json
 install -d /usr/share/jolla-settings/pages/ambience-sync

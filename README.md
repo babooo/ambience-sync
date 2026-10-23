@@ -29,10 +29,11 @@
 - **Ambience color sync:** uses the highlight color of the current ambience as Android's system color, with a choice of color style (Tonal Spot, Vibrant or Rainbow).
 - **Monochrome:** an optional grayscale Android palette.
 - **Dark/light mode:** Android follows the Style (Dark or Light) of the current ambience.
+- **Match text size:** Set Android's text size to match the text size chosen in Sailfish settings (Approximate).
 - **Always up to date:** changes are applied when you change the ambience or a setting, and again whenever AppSupport starts, so nothing is missed while Android was off.
 - **Clean removal:** turning an option off or uninstalling restores Android's previous settings.
 - **Uninstall from the settings page:** There's no launcher icon to long-press.
-- **Light on resources:** nothing polls. The background service(s) sleeps until something changes.
+- **Light on resources:** nothing polls. The background service(s) sleeps until something changes.  
 
 ## Requirements
 

@@ -10,6 +10,8 @@ STATE="$STATE_DIR/applied"
 # exists while we control Android's night mode; holds the mode it had before
 # (auto, yes or no)
 NIGHT_PREV="$STATE_DIR/night_mode_prev"
+# exists while we control Android's font scale; holds the value it had before
+FONT_PREV="$STATE_DIR/font_scale_prev"
 ANDROID_KEY="theme_customization_overlay_packages"
 
 # dconf reads the current user's database, so point root at defaultuser's
@@ -22,6 +24,10 @@ read_conf() {
 reset_android() {
     # only touch Android if we were the ones who set the theme
     if [ -e "$STATE" ]; then
+        # Android keeps the last theme style when the setting is simply deleted,
+        # so hand it a plain default first, then remove the setting
+        appsupport-attach /system/bin/settings put secure "$ANDROID_KEY" '{"android.theme.customization.color_source":"home_wallpaper","android.theme.customization.theme_style":"TONAL_SPOT"}' >/dev/null 2>&1
+        sleep 3
         appsupport-attach /system/bin/settings delete secure "$ANDROID_KEY" >/dev/null 2>&1 \
             && rm -f "$STATE"
     fi
@@ -46,9 +52,24 @@ reset_night() {
         && rm -f "$NIGHT_PREV"
 }
 
+# Put Android's font scale back to what it was before we first changed it.
+# If Android can't be reached, the marker stays and a later run retries.
+reset_font() {
+    [ -e "$FONT_PREV" ] || return 0
+    FPREV=$(cat "$FONT_PREV")
+    # it was never set, which means Android's default
+    [ "$FPREV" = "null" ] && FPREV="1.0"
+    if ! printf '%s' "$FPREV" | grep -Eq '^[0-9](\.[0-9]{1,3})?$'; then
+        rm -f "$FONT_PREV"; return 0   # unreadable marker, nothing to restore
+    fi
+    appsupport-attach /system/bin/settings put system font_scale "$FPREV" >/dev/null 2>&1 \
+        && rm -f "$FONT_PREV"
+}
+
 if [ "$1" = "--reset" ]; then
     reset_android
     reset_night
+    reset_font
     exit 0
 fi
 
@@ -56,6 +77,7 @@ fi
 ENABLED=$(read_conf /desktop/ambience-sync/enabled)
 MONOCHROME=$(read_conf /desktop/ambience-sync/monochrome)
 FOLLOW=$(read_conf /desktop/ambience-sync/follow_dark_mode)
+FOLLOW_TEXT=$(read_conf /desktop/ambience-sync/follow_text_size)
 
 # Sets (or resets) the Android system color from the highlight color
 apply_color() {
@@ -136,6 +158,37 @@ apply_night() {
     appsupport-attach /system/bin/cmd uimode night "$NIGHT" >/dev/null 2>&1
 }
 
+# Matches Android's font size to Sailfish's text size (Settings > Display >
+# Text size). The steps were matched by comparing the rendered text sizes.
+apply_font() {
+    SIZE=$(read_conf /desktop/jolla/theme/font/sizeCategory)
+    case "$SIZE" in
+        normal)   SCALE="1.0" ;;
+        large)    SCALE="1.15" ;;
+        huge)     SCALE="1.3" ;;
+        gigantic) SCALE="1.5" ;;
+        *)
+            echo "Could not read text size from dconf" >&2
+            return 1
+            ;;
+    esac
+
+    # remember Android's current scale, once, before the first change
+    if [ ! -e "$FONT_PREV" ]; then
+        FPREV=$(appsupport-attach /system/bin/settings get system font_scale 2>/dev/null \
+            | tr -d '\r\n ')
+        # anything else means Android couldn't be reached: change nothing and
+        # retry on the next run
+        if [ "$FPREV" != "null" ] && ! printf '%s' "$FPREV" | grep -Eq '^[0-9](\.[0-9]{1,3})?$'; then
+            return 1
+        fi
+        mkdir -p "$STATE_DIR"
+        printf '%s\n' "$FPREV" > "$FONT_PREV"
+    fi
+
+    appsupport-attach /system/bin/settings put system font_scale "$SCALE" >/dev/null 2>&1
+}
+
 # An ambience change only matters for the color while "Sync ambience color" is
 # on (and Monochrome off), and for the theme while "Follow light/dark theme"
 # is on. Otherwise there is nothing to update.
@@ -157,4 +210,13 @@ if [ "$FOLLOW" = "true" ]; then
     apply_night
 else
     reset_night
+fi
+
+# the text size does not depend on the ambience
+if [ "$1" != "--ambience-changed" ]; then
+    if [ "$FOLLOW_TEXT" = "true" ]; then
+        apply_font
+    else
+        reset_font
+    fi
 fi

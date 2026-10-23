@@ -29,8 +29,8 @@ while read -r line; do
                         systemctl disable --now ambience-sync.service
                         /usr/libexec/ambience-sync/apply.sh --reset
                         rm -rf /usr/libexec/ambience-sync
-                        rm -f /usr/lib/systemd/system/ambience-sync.service
-                        rm -f /usr/lib/systemd/system/ambience-sync-android.service
+                        rm -f /etc/systemd/system/ambience-sync.service
+                        rm -f /etc/systemd/system/ambience-sync-android.service
                         rm -f /usr/share/jolla-settings/entries/ambience-sync.json
                         rm -rf /usr/share/jolla-settings/pages/ambience-sync
                         rm -f /usr/share/themes/sailfish-default/silica/z*/icons*/icon-m-ambience-sync.png
@@ -41,6 +41,16 @@ while read -r line; do
             fi
             ;;
         /desktop/ambience-sync/*)
+            "$APPLY"
+            ;;
+    esac
+done &
+
+# Sailfish text size changes (Settings > Display > Text size)
+dconf watch /desktop/jolla/theme/font/ |
+while read -r line; do
+    case "$line" in
+        /desktop/jolla/theme/font/sizeCategory)
             "$APPLY"
             ;;
     esac

@@ -38,6 +38,12 @@ Page {
         defaultValue: false
     }
 
+    ConfigurationValue {
+        id: textConf
+        key: "/desktop/ambience-sync/follow_text_size"
+        defaultValue: false
+    }
+
     // Set to true to ask the root service to remove the package
     ConfigurationValue {
         id: uninstallConf
@@ -65,7 +71,7 @@ Page {
 
                     Repeater {
                         model: [
-                            qsTr("ambience-sync is a simple add-on that keeps Android apps in step with your Sailfish ambience. It syncs Android's colors and dark/light mode with the current ambience."),
+                            qsTr("ambience-sync is a simple add-on that keeps Android apps in step with your Sailfish ambience. It syncs Android's colors and dark/light mode with the current ambience, and can match Android's text size to Sailfish's."),
                             qsTr("A background service running as root waits for changes to the ambience or to the settings on this page and applies them to Android (AppSupport). A second small service starts together with AppSupport and applies your settings again, so nothing is missed while Android was off."),
                             qsTr("Turning an option off, or uninstalling, restores Android to how it was before. For the cleanest result, uninstall while AppSupport is running.")
                         ]
@@ -176,6 +182,16 @@ Page {
     checked: followConf.value
     onClicked: followConf.value = !followConf.value
 }
+
+            SectionHeader { text: qsTr("Text size") }
+
+            TextSwitch {
+                text: qsTr("Match text size")
+                description: qsTr("Set Android's font size to approximately-match the text size chosen in Sailfish's Display settings.")
+                automaticCheck: false
+                checked: textConf.value
+                onClicked: textConf.value = !textConf.value
+            }
         }
 
         VerticalScrollDecorator {}

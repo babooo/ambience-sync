@@ -4,13 +4,12 @@
 
 Name:       ambience-sync
 Summary:    Match Android's colors and dark/light theme to the Sailfish ambience
-Version:    1.0.0
-Release:    1
+Version:    1.0.1
+Release:    2
 License:    MIT
 BuildArch:  noarch
-URL:        none
+URL:        https://github.com/babooo/ambience-sync
 Source0:    %{name}-%{version}.tar.gz
-Requires:   /usr/sbin/appsupport-attach
 
 %description
 Adds an "Android theme" page under Settings > Look and feel. It can use
@@ -30,9 +29,9 @@ install -d %{buildroot}/usr/libexec/ambience-sync
 install -m 0755 apply.sh %{buildroot}/usr/libexec/ambience-sync/apply.sh
 install -m 0755 watch.sh %{buildroot}/usr/libexec/ambience-sync/watch.sh
 install -m 0755 on-appsupport-start.sh %{buildroot}/usr/libexec/ambience-sync/on-appsupport-start.sh
-install -d %{buildroot}/usr/lib/systemd/system
-install -m 0644 ambience-sync.service %{buildroot}/usr/lib/systemd/system/ambience-sync.service
-install -m 0644 ambience-sync-android.service %{buildroot}/usr/lib/systemd/system/ambience-sync-android.service
+install -d %{buildroot}/etc/systemd/system
+install -m 0644 ambience-sync.service %{buildroot}/etc/systemd/system/ambience-sync.service
+install -m 0644 ambience-sync-android.service %{buildroot}/etc/systemd/system/ambience-sync-android.service
 install -d %{buildroot}/usr/share/jolla-settings/entries
 install -m 0644 ambience-sync.json %{buildroot}/usr/share/jolla-settings/entries/ambience-sync.json
 install -d %{buildroot}/usr/share/jolla-settings/pages/ambience-sync
@@ -50,14 +49,25 @@ done
 /usr/libexec/ambience-sync/apply.sh
 /usr/libexec/ambience-sync/watch.sh
 /usr/libexec/ambience-sync/on-appsupport-start.sh
-/usr/lib/systemd/system/ambience-sync.service
-/usr/lib/systemd/system/ambience-sync-android.service
+/etc/systemd/system/ambience-sync.service
+/etc/systemd/system/ambience-sync-android.service
 /usr/share/jolla-settings/entries/ambience-sync.json
 %dir /usr/share/jolla-settings/pages/ambience-sync
 /usr/share/jolla-settings/pages/ambience-sync/ambience-sync.qml
 /usr/share/themes/sailfish-default/silica/z*/icons*/icon-m-ambience-sync.png
 
-%post
+%pre
+VER=$(rpm -qa | sed -n 's/^appsupport\([0-9][0-9]*\)-system-.*/\1/p' | sort -n | tail -n1)
+if [ -z "$VER" ]; then
+    echo "ambience-sync needs Android AppSupport, which is not installed." >&2
+    exit 1
+fi
+if [ "$VER" -lt 13 ]; then
+    echo "ambience-sync needs Android 13 or newer (found Android $VER)." >&2
+    exit 1
+fi
+
+%posttrans
 systemctl daemon-reload || :
 systemctl enable ambience-sync.service || :
 systemctl enable ambience-sync-android.service || :
