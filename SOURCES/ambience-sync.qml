@@ -44,6 +44,27 @@ Page {
         defaultValue: false
     }
 
+    // Written by the root service: false when this Android can't apply colors.
+    // Unset counts as supported, so nothing is hidden while it is not known.
+    ConfigurationValue {
+        id: colorsSupportedConf
+        key: "/desktop/ambience-sync/colors_supported"
+        defaultValue: true
+    }
+    readonly property bool colorsSupported: colorsSupportedConf.value !== false
+
+    ConfigurationValue {
+        id: pureBlackConf
+        key: "/desktop/ambience-sync/pure_black"
+        defaultValue: false
+    }
+
+    ConfigurationValue {
+        id: pureBlackAllConf
+        key: "/desktop/ambience-sync/pure_black_all"
+        defaultValue: false
+    }
+
     // Set to true to ask the root service to remove the package
     ConfigurationValue {
         id: uninstallConf
@@ -89,7 +110,7 @@ Page {
                     DetailItem {
                         width: parent.width
                         label: qsTr("Version")
-                        value: "1.0.1"
+                        value: "1.1.0"
                     }
 
                     Button {
@@ -106,7 +127,7 @@ Page {
 
     SilicaFlickable {
         anchors.fill: parent
-        contentHeight: column.height
+        contentHeight: column.height + Theme.paddingLarge
 
         PullDownMenu {
             MenuItem {
@@ -134,14 +155,27 @@ Page {
                 title: qsTr("Android theme")
             }
 
-            SectionHeader { text: qsTr("Colors") }
+            SectionHeader {
+                text: qsTr("Color scheme")
+            }
+
+            Label {
+                visible: !page.colorsSupported
+                x: Theme.horizontalPageMargin
+                width: parent.width - 1 * Theme.horizontalPageMargin
+                wrapMode: Text.Wrap
+                font.pixelSize: Theme.fontSizeExtraSmall
+                color: Theme.highlightColor
+                text: qsTr("Applying colors won't work with the Android (AppSupport) version available on this device")
+            }
 
             TextSwitch {
                 text: qsTr("Sync ambience color")
                 description: qsTr("Use the highlight color of the current ambience as the Android system's primary color. Turn this and Monochrome off to restore the default Android colors.")
                 automaticCheck: false
-                // faded out and locked while Monochrome is on
-                enabled: !monochromeConf.value
+                // faded out and locked while Monochrome is on, or when colors can't
+                // work here (it can still be switched off)
+                enabled: !monochromeConf.value && (page.colorsSupported || enabledConf.value)
                 checked: enabledConf.value
                 onClicked: enabledConf.value = !enabledConf.value
             }
@@ -150,10 +184,10 @@ Page {
                 width: parent.width
                 label: qsTr("Theme style")
                 description: page.styleDescriptions[Math.max(currentIndex, 0)]
-                enabled: enabledConf.value
+                enabled: enabledConf.value && page.colorsSupported
                 // an old stored index (fallback)
                 currentIndex: styleConf.value < 3 ? styleConf.value : 0
-
+                
                 menu: ContextMenu {
                     MenuItem { text: qsTr("Tonal Spot") }
                     MenuItem { text: qsTr("Vibrant") }
@@ -167,27 +201,75 @@ Page {
                 text: qsTr("Monochrome")
                 description: qsTr("Give Android a grayscale palette without any color. This can't be combined with Sync ambience color.")
                 automaticCheck: false
-                // faded out and locked while Sync ambience color is on
-                enabled: !enabledConf.value
+                // faded out and locked while Sync ambience color is on, or when
+                // colors can't work here (it can still be switched off)
+                enabled: !enabledConf.value && (page.colorsSupported || monochromeConf.value)
                 checked: monochromeConf.value
                 onClicked: monochromeConf.value = !monochromeConf.value
             }
 
-            SectionHeader { text: qsTr("Dark/light theme") }
+            SectionHeader {
+                text: qsTr("Dark/light")
+            }
 
             TextSwitch {
-    text: qsTr("Follow ambience style (Dark/Light)")
-    description: qsTr("Switch Android between its dark and light theme to match the Style of the current ambience.")
-    automaticCheck: false
-    checked: followConf.value
-    onClicked: followConf.value = !followConf.value
-}
+                text: qsTr("Follow ambience style (Dark/Light)")
+                description: qsTr("Switch Android between its dark and light theme to match the Style of the current ambience.")
+                automaticCheck: false
+                checked: followConf.value
+                onClicked: followConf.value = !followConf.value
+            }
 
-            SectionHeader { text: qsTr("Text size") }
+              Label {
+                x: Theme.horizontalPageMargin
+                width: parent.width - 2 * Theme.horizontalPageMargin
+                text: qsTr("AMOLED")
+                color: Theme.secondaryHighlightColor
+                font.pixelSize: Theme.fontSizeExtraSmall
+                horizontalAlignment: Text.AlignHCenter
+                topPadding: Theme.paddingMedium
+                }
+
+            Label {
+                visible: !page.colorsSupported
+                x: Theme.horizontalPageMargin
+                width: parent.width - 2 * Theme.horizontalPageMargin
+                wrapMode: Text.Wrap
+                font.pixelSize: Theme.fontSizeExtraSmall
+                horizontalAlignment: Text.AlignHCenter
+                color: Theme.secondaryHighlightColor
+                text: qsTr("Pure black won't work with the Android (AppSupport) version available on this device")
+            }
+
+            TextSwitch {
+                text: qsTr("Pure black")
+                description: qsTr("Use pure black instead of gray for backgrounds in Android's dark theme. Background tint of selected Theme style won't apply, however its color will.")
+                automaticCheck: false
+                // faded out and locked when colors can't work here, since pure black
+                // needs the same overlay service (it can still be switched off)
+                enabled: page.colorsSupported || pureBlackConf.value
+                checked: pureBlackConf.value
+                onClicked: pureBlackConf.value = !pureBlackConf.value
+            }
+
+            // only offered while Pure black is on
+            TextSwitch {
+                visible: pureBlackConf.value
+                text: qsTr("Black cards and surfaces")
+                description: qsTr("Also make cards, sections and other raised surfaces pure black, so everything blends into the background. They can be hard to tell apart then.")
+                automaticCheck: false
+                enabled: page.colorsSupported || pureBlackAllConf.value
+                checked: pureBlackAllConf.value
+                onClicked: pureBlackAllConf.value = !pureBlackAllConf.value
+            }
+
+            SectionHeader {
+                text: qsTr("Text size")
+            }
 
             TextSwitch {
                 text: qsTr("Match text size")
-                description: qsTr("Set Android's font size to approximately-match the text size chosen in Sailfish's Display settings.")
+                description: qsTr("Set Android's font size to match the text size chosen in Sailfish Display settings.")
                 automaticCheck: false
                 checked: textConf.value
                 onClicked: textConf.value = !textConf.value

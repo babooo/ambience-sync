@@ -13,7 +13,8 @@ while [ "$i" -lt 60 ]; do
     if [ "$ready" = "1" ]; then
         # small margin: Android's settings provider can lag behind boot_completed
         sleep 2
-        exec "$APPLY"
+        "$APPLY"
+        exec "$APPLY" --detect
     fi
     i=$((i + 1))
     sleep 1

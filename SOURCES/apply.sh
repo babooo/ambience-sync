@@ -13,6 +13,29 @@ NIGHT_PREV="$STATE_DIR/night_mode_prev"
 # exists while we control Android's font scale; holds the value it had before
 FONT_PREV="$STATE_DIR/font_scale_prev"
 ANDROID_KEY="theme_customization_overlay_packages"
+# exists while we control Android's dark surface colors (pure black)
+BLACK_STATE="$STATE_DIR/pure_black"
+# Pure black is a set of fabricated overlays, one per dark surface color of the
+# Android framework. They all share the prefix pb_, so they can be found again
+# and switched off.
+BLACK_PKG="com.android.shell"
+# Pure black has two levels. The base level makes only the base layer black
+# (backgrounds), so cards and other raised surfaces keep Android's dark gray and
+# stay visible on top of it. The extra level ("Black cards and surfaces") makes
+# those black as well, so everything blends together. To move a color between the
+# levels, move its name ("system_<role>_dark") between the two lists. Overlays of
+# ours that are no longer wanted are switched off automatically.
+BLACK_BASE="system_background_dark system_surface_dark system_surface_dim_dark
+system_surface_container_lowest_dark"
+BLACK_EXTRA="system_surface_container_low_dark system_surface_container_dark
+system_surface_container_high_dark system_surface_container_highest_dark
+system_surface_bright_dark system_surface_variant_dark"
+# what is applied right now; set from the settings below
+BLACK_RES="$BLACK_BASE"
+BLACK_COUNT=0
+# set to 1 whenever we change Android's color setting: Android then registers its
+# own color overlays again (see apply_black)
+COLOR_TOUCHED=0
 
 # dconf reads the current user's database, so point root at defaultuser's
 export XDG_CONFIG_HOME="$USER_HOME/.config"
@@ -24,6 +47,7 @@ read_conf() {
 reset_android() {
     # only touch Android if we were the ones who set the theme
     if [ -e "$STATE" ]; then
+        COLOR_TOUCHED=1
         # Android keeps the last theme style when the setting is simply deleted,
         # so hand it a plain default first, then remove the setting
         appsupport-attach /system/bin/settings put secure "$ANDROID_KEY" '{"android.theme.customization.color_source":"home_wallpaper","android.theme.customization.theme_style":"TONAL_SPOT"}' >/dev/null 2>&1
@@ -66,10 +90,56 @@ reset_font() {
         && rm -f "$FONT_PREV"
 }
 
+# Switch the pure black overlays off again (Android then uses its normal dark
+# colors). If Android can't be reached, the marker stays and a later run retries.
+reset_black() {
+    [ -e "$BLACK_STATE" ] || return 0
+    LIST=$(appsupport-attach /system/bin/cmd overlay list 2>/dev/null) || return 1
+    LIST=$(printf '%s\n' "$LIST" | tr -d '\r')
+    # an empty list means Android could not be asked, not that nothing is on
+    printf '%s\n' "$LIST" | grep -Eq '^\[.\] ' || return 1
+    FAIL=0
+    for o in $(printf '%s\n' "$LIST" | grep -o "^\[x\] $BLACK_PKG:pb_[A-Za-z0-9_]*" | sed 's/^\[x\] //'); do
+        appsupport-attach /system/bin/cmd overlay disable --user 0 "$o" >/dev/null 2>&1 || FAIL=1
+    done
+    if [ "$FAIL" = 0 ]; then
+        rm -f "$BLACK_STATE"
+    else
+        return 1
+    fi
+}
+
+# Finds out whether this Android can apply system colors, for the settings page.
+# Android builds its color overlays through the overlay service; where that does
+# not work (seen on an AppSupport 13) the overlay list is empty. The page reads
+# the result from dconf and greys out the color options. Nothing is written
+# while Android is not running, so an unknown state never hides anything.
+detect_colors() {
+    export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/100000/dbus/user_bus_socket"
+    READY=$(appsupport-attach /system/bin/getprop sys.boot_completed 2>/dev/null | tr -d '\r\n ')
+    [ "$READY" = "1" ] || return 0
+    i=0
+    while [ "$i" -lt 10 ]; do
+        if appsupport-attach /system/bin/cmd overlay list 2>/dev/null | grep -Eq '^\[.\] '; then
+            dconf write /desktop/ambience-sync/colors_supported true
+            return 0
+        fi
+        i=$((i + 1))
+        sleep 1
+    done
+    dconf write /desktop/ambience-sync/colors_supported false
+}
+
+if [ "$1" = "--detect" ]; then
+    detect_colors
+    exit 0
+fi
+
 if [ "$1" = "--reset" ]; then
     reset_android
     reset_night
     reset_font
+    reset_black
     exit 0
 fi
 
@@ -78,9 +148,25 @@ ENABLED=$(read_conf /desktop/ambience-sync/enabled)
 MONOCHROME=$(read_conf /desktop/ambience-sync/monochrome)
 FOLLOW=$(read_conf /desktop/ambience-sync/follow_dark_mode)
 FOLLOW_TEXT=$(read_conf /desktop/ambience-sync/follow_text_size)
+PUREBLACK=$(read_conf /desktop/ambience-sync/pure_black)
+PUREBLACK_ALL=$(read_conf /desktop/ambience-sync/pure_black_all)
+
+# the extra level only counts while pure black itself is on
+BLACK_RES="$BLACK_BASE"
+if [ "$PUREBLACK" = "true" ] && [ "$PUREBLACK_ALL" = "true" ]; then
+    BLACK_RES="$BLACK_BASE $BLACK_EXTRA"
+fi
+BLACK_COUNT=$(printf '%s\n' $BLACK_RES | wc -l | tr -d ' ')
 
 # Sets (or resets) the Android system color from the highlight color
 apply_color() {
+    # this Android can't apply colors (see detect_colors): give back anything
+    # we set earlier and leave it at that
+    if [ "$(read_conf /desktop/ambience-sync/colors_supported)" = "false" ]; then
+        reset_android
+        return 0
+    fi
+
     if [ "$ENABLED" != "true" ] && [ "$MONOCHROME" != "true" ]; then
         reset_android
         return 0
@@ -119,6 +205,9 @@ apply_color() {
     fi
 
     JSON="{\"android.theme.customization.system_palette\":\"#$RGB\",\"android.theme.customization.color_source\":\"preset\",\"android.theme.customization.theme_style\":\"$STYLE\"}"
+
+    OLD=$(appsupport-attach /system/bin/settings get secure "$ANDROID_KEY" 2>/dev/null | tr -d '\r')
+    [ "$OLD" = "$JSON" ] || COLOR_TOUCHED=1
 
     if appsupport-attach /system/bin/settings put secure "$ANDROID_KEY" "$JSON" >/dev/null 2>&1; then
         mkdir -p "$STATE_DIR"
@@ -189,6 +278,110 @@ apply_font() {
     appsupport-attach /system/bin/settings put system font_scale "$SCALE" >/dev/null 2>&1
 }
 
+# True when all our overlays are enabled and none of SystemUI's own color overlays
+# (com.android.systemui:neutral, accent, dynamic) is listed after them. The list
+# is in priority order, so whatever comes last wins, and SystemUI's "dynamic"
+# overlay defines the very same dark surface colors that we override.
+black_in_order() {
+    printf '%s\n' "$1" | awk -v pkg="$BLACK_PKG" -v want="$BLACK_COUNT" '
+        /^[^[]/ && NF { g = $0 }
+        index($0, "[x] com.android.systemui:") == 1 { sys[g] = NR }
+        index($0, "[x] " pkg ":pb_") == 1 { n++; pg = g; if (!(g in first)) first[g] = NR }
+        END { exit !(n == want && first[pg] > sys[pg]) }'
+}
+
+# True when the overlay list that is read right now is in order (see above).
+black_verify() {
+    V=$(appsupport-attach /system/bin/cmd overlay list 2>/dev/null) || return 1
+    V=$(printf '%s\n' "$V" | tr -d '\r')
+    black_in_order "$V"
+}
+
+# (Re)creates and enables all overlays. Each one is switched off first, so that it
+# ends up last in the priority order, above SystemUI's. Overlays of ours that are
+# enabled but no longer in $BLACK_RES (earlier versions, or the extra level that was
+# switched off) are switched off.
+#
+# All steps are sent to Android in ONE call, so the overlays change within a few
+# milliseconds and the screen flashes once, instead of once per overlay. $LIST is
+# the overlay list that apply_black has just read.
+black_force() {
+    # marker first, so a half-finished run can still be undone
+    mkdir -p "$STATE_DIR"
+    : > "$BLACK_STATE"
+
+    ACMD="/system/bin/cmd overlay"
+    NAMES=$( {
+        printf '%s\n' "$LIST" | grep -o "^\[x\] $BLACK_PKG:pb_[A-Za-z0-9_]*" | sed 's/^\[x\] //'
+        for r in $BLACK_RES; do echo "$BLACK_PKG:pb_$r"; done
+    } | sort -u )
+
+    SCRIPT="f=0;"
+    for o in $NAMES; do
+        SCRIPT="$SCRIPT $ACMD disable --user 0 $o >/dev/null 2>&1;"
+    done
+    for r in $BLACK_RES; do
+        SCRIPT="$SCRIPT $ACMD fabricate --target android --name pb_$r android:color/$r 0x1c 0xff000000 >/dev/null 2>&1 || f=1;"
+    done
+    for r in $BLACK_RES; do
+        SCRIPT="$SCRIPT $ACMD enable --user 0 $BLACK_PKG:pb_$r >/dev/null 2>&1 || f=1;"
+    done
+    appsupport-attach /system/bin/sh -c "$SCRIPT exit \$f" >/dev/null 2>&1
+
+    # appsupport-attach may not pass such a command on as it is, so check the
+    # result, and if it is not right, do the same step by step instead
+    black_verify && return 0
+
+    for o in $NAMES; do
+        appsupport-attach /system/bin/cmd overlay disable --user 0 "$o" >/dev/null 2>&1
+    done
+    FAIL=0
+    for r in $BLACK_RES; do
+        appsupport-attach /system/bin/cmd overlay fabricate --target android \
+            --name "pb_$r" "android:color/$r" 0x1c 0xff000000 >/dev/null 2>&1 \
+            && appsupport-attach /system/bin/cmd overlay enable --user 0 \
+                "$BLACK_PKG:pb_$r" >/dev/null 2>&1 \
+            || FAIL=1
+    done
+    [ "$FAIL" = 0 ]
+}
+
+# Makes Android's dark theme pure black: the colors in $BLACK_RES (the backgrounds,
+# and with "Black cards and surfaces" the raised surfaces too) are overridden with
+# #000000 through fabricated overlays. It only shows while Android is in
+# its dark theme, so it does not depend on the ambience or the style setting.
+#
+# But whenever Android's color setting changes, SystemUI registers its own color
+# overlays again a moment later, which puts them above ours and brings the gray
+# back. So after such a change, keep checking for a few seconds ($SETTLE) and put
+# ours back on top when needed. A normal run is one quick check that does nothing
+# while everything is in order.
+apply_black() {
+    # this Android can't apply colors (see detect_colors): its overlay service
+    # does not work, which pure black needs as well. Give back anything we set
+    # earlier and leave it at that
+    if [ "$(read_conf /desktop/ambience-sync/colors_supported)" = "false" ]; then
+        reset_black
+        return 0
+    fi
+
+    i=0
+    while :; do
+        LIST=$(appsupport-attach /system/bin/cmd overlay list 2>/dev/null) || return 1
+        LIST=$(printf '%s\n' "$LIST" | tr -d '\r')
+        # an empty list means Android could not be asked: change nothing and
+        # retry on the next run
+        printf '%s\n' "$LIST" | grep -Eq '^\[.\] ' || return 1
+
+        black_in_order "$LIST" || black_force || return 1
+
+        [ "$i" -ge "${SETTLE:-0}" ] && break
+        i=$((i + 1))
+        sleep 1
+    done
+    return 0
+}
+
 # An ambience change only matters for the color while "Sync ambience color" is
 # on (and Monochrome off), and for the theme while "Follow light/dark theme"
 # is on. Otherwise there is nothing to update.
@@ -219,4 +412,17 @@ if [ "$1" != "--ambience-changed" ]; then
     else
         reset_font
     fi
+fi
+
+# Pure black does not depend on the ambience, but a changed color setting makes
+# Android register its color overlays again on top of ours, so it is checked after
+# the color step, also on an ambience change.
+if [ "$PUREBLACK" = "true" ]; then
+    SETTLE=0
+    if [ "$COLOR_TOUCHED" = 1 ]; then
+        SETTLE=6
+    fi
+    apply_black
+elif [ "$1" != "--ambience-changed" ]; then
+    reset_black
 fi

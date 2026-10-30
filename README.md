@@ -29,6 +29,7 @@
 - **Ambience color sync:** uses the highlight color of the current ambience as Android's system color, with a choice of color style (Tonal Spot, Vibrant or Rainbow).
 - **Monochrome:** an optional grayscale Android palette.
 - **Dark/light mode:** Android follows the Style (Dark or Light) of the current ambience.
+- **Pure black background** (& other surfaces): option available for dark mode.
 - **Match text size:** Set Android's text size to match the text size chosen in Sailfish settings (Approximate).
 - **Always up to date:** changes are applied when you change the ambience or a setting, and again whenever AppSupport starts, so nothing is missed while Android was off.
 - **Clean removal:** turning an option off or uninstalling restores Android's previous settings.
@@ -37,22 +38,35 @@
 
 ## Requirements
 
-- AppSupport (the Android runtime) installed
+- AppSupport (the Android runtime) installed & =/> 13 (API level 33).
+
+Some features might not work on Android < 15 (JP2), e.g. Xperia XA2.
+
+Check [Compatibility](#compatibility) for more info.
 
 ## Installation
+
 Note: Check files & RPMs names. Changes are not always reflected in this Readme file.
 
 #### From the RPM
 
 Download the latest RPM from Openrepos: https://openrepos.net/content/baboo/ambience-sync
 
-The simplest way to install it: open the RPM in the file manager and **Install**.
+Check files and RPMs names, as they're not always reflected in this 'readme' file.
+
+#### From the RPM
+
+Download the latest RPM from [Openrepos](https://openrepos.net/content/baboo/ambience-sync).
+
+The simplest way to install it: from **Storeman**.
+
+**OR**
 
 From a terminal you have two options:
 
 ```sh
-pkcon install-local ambience-sync-1.0.0-1.noarch.rpm   # asks you to authenticate with your device lock code
-devel-su rpm -i ambience-sync-1.0.0-1.noarch.rpm       # as root, no prompt
+pkcon install-local ambience-sync-1.1.0-1.noarch.rpm   # asks you to authenticate with your device lock code
+devel-su rpm -i ambience-sync-1.1.0-1.noarch.rpm       # as root, no prompt
 ```
 
 #### From source, without building an RPM
@@ -68,7 +82,7 @@ devel-su ./install.sh
 The spec expects a source tarball in `~/rpmbuild/SOURCES`.<br><br>From the project folder:
 
 ```sh
-tar czf ~/rpmbuild/SOURCES/ambience-sync-1.0.0.tar.gz *
+tar czf ~/rpmbuild/SOURCES/ambience-sync-1.1.0.tar.gz *
 rpmbuild -bb ~/rpmbuild/SPECS/ambience-sync.spec
 ```
 
@@ -109,5 +123,14 @@ AppSupport starts ──> ambience-sync-android.service ──> on-appsupport-st
 - While *Follow ambience style* is on, a dark/light mode you set by hand in Android is overridden at the next ambience change. Turning the option off restores the mode Android had before you first switched it on.
 - The app hardcodes the user `defaultuser` and the `appsupport@defaultuser` service, as on standard Sailfish OS devices.
 
+## Compatibility
+
+**Colors may not work on some Android versions.** Sync ambience color, Monochrome and Pure black rely on Android's system color overlays. On the AppSupport 13 of the **Sony Xperia XA2**, Android does not create these overlays: its overlay list is empty and applying a color fails inside Android itself ("commit failed" in the Android log). Nothing the app writes can fix that.
+
+On devices where this happens, the script(s) detects it (Android's overlay list is empty) and greys out the color options on the settings page, with a note saying so. Follow ambience style (dark/light) and Match text size do not depend on overlays so they work on both devices.
+
+Only these two devices have been tested. Other Android 13 builds may work, so reports are welcome.
+
 ## Notes
-- Built & tested on device. *v5.2.0.20*
+- Built & tested on JP2 *v5.2.0.18/20/22*.
+- Also tested on XA2 **v5.1.0.11*, v5.2.0.22*. 

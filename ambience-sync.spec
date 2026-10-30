@@ -4,8 +4,8 @@
 
 Name:       ambience-sync
 Summary:    Match Android's colors and dark/light theme to the Sailfish ambience
-Version:    1.0.1
-Release:    2
+Version:    1.1.0
+Release:    1
 License:    MIT
 BuildArch:  noarch
 URL:        https://github.com/babooo/ambience-sync

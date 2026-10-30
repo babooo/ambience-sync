@@ -7,6 +7,9 @@ APPLY="/usr/libexec/ambience-sync/apply.sh"
 export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/100000/dbus/user_bus_socket"
 export XDG_CONFIG_HOME="/home/defaultuser/.config"
 
+# does this Android support colors? (in the background; it can take a while)
+"$APPLY" --detect &
+
 "$APPLY"
 
 # settings page changes (switch or style); dconf watch prints the key path
