@@ -19,20 +19,22 @@ BLACK_STATE="$STATE_DIR/pure_black"
 # Android framework. They all share the prefix pb_, so they can be found again
 # and switched off.
 BLACK_PKG="com.android.shell"
-# Pure black has two levels. The base level makes only the base layer black
-# (backgrounds), so cards and other raised surfaces keep Android's dark gray and
-# stay visible on top of it. The extra level ("Black cards and surfaces") makes
-# those black as well, so everything blends together. To move a color between the
-# levels, move its name ("system_<role>_dark") between the two lists. Overlays of
-# ours that are no longer wanted are switched off automatically.
+# Pure black has two levels. The base level makes the backgrounds black: the
+# base layer of a screen, and the "container" color that Android's Settings uses
+# as its page background and that many apps use for their top and bottom bars.
+# Cards and other raised surfaces (container_high, container_highest, ...) keep
+# Android's dark gray and stay visible on top of it. The extra level
+# ("Black cards and surfaces") makes those black as well, so everything blends
+# together. To move a color between the levels, move its name
+# ("system_<role>_dark") between the two lists. Overlays of ours that are no
+# longer wanted are switched off automatically.
 BLACK_BASE="system_background_dark system_surface_dark system_surface_dim_dark
-system_surface_container_lowest_dark"
-BLACK_EXTRA="system_surface_container_low_dark system_surface_container_dark
-system_surface_container_high_dark system_surface_container_highest_dark
-system_surface_bright_dark system_surface_variant_dark"
+system_surface_container_lowest_dark system_surface_container_dark"
+BLACK_EXTRA="system_surface_container_low_dark system_surface_container_high_dark
+system_surface_container_highest_dark system_surface_bright_dark
+system_surface_variant_dark"
 # what is applied right now; set from the settings below
 BLACK_RES="$BLACK_BASE"
-BLACK_COUNT=0
 # set to 1 whenever we change Android's color setting: Android then registers its
 # own color overlays again (see apply_black)
 COLOR_TOUCHED=0
@@ -156,7 +158,6 @@ BLACK_RES="$BLACK_BASE"
 if [ "$PUREBLACK" = "true" ] && [ "$PUREBLACK_ALL" = "true" ]; then
     BLACK_RES="$BLACK_BASE $BLACK_EXTRA"
 fi
-BLACK_COUNT=$(printf '%s\n' $BLACK_RES | wc -l | tr -d ' ')
 
 # Sets (or resets) the Android system color from the highlight color
 apply_color() {
@@ -278,16 +279,28 @@ apply_font() {
     appsupport-attach /system/bin/settings put system font_scale "$SCALE" >/dev/null 2>&1
 }
 
-# True when all our overlays are enabled and none of SystemUI's own color overlays
-# (com.android.systemui:neutral, accent, dynamic) is listed after them. The list
-# is in priority order, so whatever comes last wins, and SystemUI's "dynamic"
-# overlay defines the very same dark surface colors that we override.
-black_in_order() {
-    printf '%s\n' "$1" | awk -v pkg="$BLACK_PKG" -v want="$BLACK_COUNT" '
+# True when none of SystemUI's own color overlays (com.android.systemui:neutral,
+# accent, dynamic) is listed after ours in the overlay list $1. The list is in
+# priority order, so whatever comes last wins, and SystemUI's "dynamic" overlay
+# defines the very same dark surface colors that we override. Having none of ours
+# enabled counts as in order.
+black_order_ok() {
+    printf '%s\n' "$1" | awk -v pkg="$BLACK_PKG" '
         /^[^[]/ && NF { g = $0 }
         index($0, "[x] com.android.systemui:") == 1 { sys[g] = NR }
         index($0, "[x] " pkg ":pb_") == 1 { n++; pg = g; if (!(g in first)) first[g] = NR }
-        END { exit !(n == want && first[pg] > sys[pg]) }'
+        END { exit !(n == 0 || first[pg] > sys[pg]) }'
+}
+
+# The names (without the pb_ prefix) of our overlays that are enabled in list $1
+black_enabled() {
+    printf '%s\n' "$1" | grep -o "^\[x\] $BLACK_PKG:pb_[A-Za-z0-9_]*" | sed "s/^\[x\] $BLACK_PKG:pb_//"
+}
+
+# True when exactly the overlays we want are enabled, and they are in order
+black_in_order() {
+    [ "$(black_enabled "$1" | sort)" = "$(printf '%s\n' $BLACK_RES | sort)" ] \
+        && black_order_ok "$1"
 }
 
 # True when the overlay list that is read right now is in order (see above).
@@ -297,33 +310,49 @@ black_verify() {
     black_in_order "$V"
 }
 
-# (Re)creates and enables all overlays. Each one is switched off first, so that it
-# ends up last in the priority order, above SystemUI's. Overlays of ours that are
-# enabled but no longer in $BLACK_RES (earlier versions, or the extra level that was
-# switched off) are switched off.
+# Brings our overlays in line with $BLACK_RES. $LIST is the overlay list that
+# apply_black has just read.
+#
+# - If what we have is still on top, it is left completely alone (so nothing
+#   flashes): only overlays that are no longer wanted are switched off and only
+#   missing ones are added. That is what happens when "Black cards and surfaces"
+#   is switched on or off.
+# - If SystemUI's overlays have come on top, ours are all switched off and put
+#   back, so that they end up last in the priority order.
 #
 # All steps are sent to Android in ONE call, so the overlays change within a few
-# milliseconds and the screen flashes once, instead of once per overlay. $LIST is
-# the overlay list that apply_black has just read.
+# milliseconds instead of with a delay between each of them.
 black_force() {
     # marker first, so a half-finished run can still be undone
     mkdir -p "$STATE_DIR"
     : > "$BLACK_STATE"
 
-    ACMD="/system/bin/cmd overlay"
-    NAMES=$( {
-        printf '%s\n' "$LIST" | grep -o "^\[x\] $BLACK_PKG:pb_[A-Za-z0-9_]*" | sed 's/^\[x\] //'
-        for r in $BLACK_RES; do echo "$BLACK_PKG:pb_$r"; done
-    } | sort -u )
+    WANT=$(printf '%s ' $BLACK_RES)
+    HAVE=$(black_enabled "$LIST" | tr '\n' ' ')
 
+    if black_order_ok "$LIST"; then
+        DISABLE=""
+        for e in $HAVE; do
+            case " $WANT " in *" $e "*) ;; *) DISABLE="$DISABLE $e" ;; esac
+        done
+        CREATE=""
+        for r in $WANT; do
+            case " $HAVE " in *" $r "*) ;; *) CREATE="$CREATE $r" ;; esac
+        done
+    else
+        DISABLE="$HAVE $WANT"
+        CREATE="$WANT"
+    fi
+
+    ACMD="/system/bin/cmd overlay"
     SCRIPT="f=0;"
-    for o in $NAMES; do
-        SCRIPT="$SCRIPT $ACMD disable --user 0 $o >/dev/null 2>&1;"
+    for r in $DISABLE; do
+        SCRIPT="$SCRIPT $ACMD disable --user 0 $BLACK_PKG:pb_$r >/dev/null 2>&1;"
     done
-    for r in $BLACK_RES; do
+    for r in $CREATE; do
         SCRIPT="$SCRIPT $ACMD fabricate --target android --name pb_$r android:color/$r 0x1c 0xff000000 >/dev/null 2>&1 || f=1;"
     done
-    for r in $BLACK_RES; do
+    for r in $CREATE; do
         SCRIPT="$SCRIPT $ACMD enable --user 0 $BLACK_PKG:pb_$r >/dev/null 2>&1 || f=1;"
     done
     appsupport-attach /system/bin/sh -c "$SCRIPT exit \$f" >/dev/null 2>&1
@@ -332,11 +361,11 @@ black_force() {
     # result, and if it is not right, do the same step by step instead
     black_verify && return 0
 
-    for o in $NAMES; do
-        appsupport-attach /system/bin/cmd overlay disable --user 0 "$o" >/dev/null 2>&1
+    for r in $DISABLE; do
+        appsupport-attach /system/bin/cmd overlay disable --user 0 "$BLACK_PKG:pb_$r" >/dev/null 2>&1
     done
     FAIL=0
-    for r in $BLACK_RES; do
+    for r in $CREATE; do
         appsupport-attach /system/bin/cmd overlay fabricate --target android \
             --name "pb_$r" "android:color/$r" 0x1c 0xff000000 >/dev/null 2>&1 \
             && appsupport-attach /system/bin/cmd overlay enable --user 0 \
